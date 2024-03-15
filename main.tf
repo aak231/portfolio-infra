@@ -55,7 +55,7 @@ resource "aws_s3_bucket_policy" "allow_access_from_current_account" {
   bucket = aws_s3_bucket.portfolio_bucket.id
 
   policy = jsonencode({
-    "Version" : "2024-03-15",
+    "Version" : "2012-10-17",
     "Statement" : [
       {
         "Action" : [
