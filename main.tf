@@ -54,6 +54,9 @@ resource "aws_s3_bucket_website_configuration" "portfolio_bucket_website" {
 data "aws_iam_user" "runner" {
   user_name = "aak231-github-runner"
 }
+data "aws_iam_user" "main" {
+  user_name = "aak231"
+}
 
 resource "aws_s3_bucket_policy" "allow_access_from_current_account" {
   bucket = aws_s3_bucket.portfolio_bucket.id
@@ -68,16 +71,6 @@ resource "aws_s3_bucket_policy" "allow_access_from_current_account" {
         "Action" : "s3:GetObject",
         "Resource" : "${aws_s3_bucket.portfolio_bucket.arn}/*"
       },
-      {
-        "Sid" : "S3PolicyStmt-DO-NOT-MODIFY-1698088573404",
-        "Effect" : "Allow",
-        "Principal" : {
-          "AWS" : "${data.aws_iam_user.runner.arn}",
-          "Service" : "logging.s3.amazonaws.com"
-        },
-        "Action" : "s3:PutObject",
-        "Resource" : "${aws_s3_bucket.portfolio_bucket.arn}/*"
-      }
     ]
   })
 }
@@ -127,80 +120,64 @@ resource "aws_acm_certificate_validation" "cert_validation" {
   certificate_arn         = aws_acm_certificate.cert.arn
   validation_record_fqdns = [for record in aws_route53_record.cname_records : record.fqdn]
 }
+locals {
+  s3_origin_id = "myS3Origin"
+}
+resource "aws_cloudfront_distribution" "s3_distribution" {
+  origin {
+    domain_name = aws_s3_bucket.portfolio_bucket.bucket_regional_domain_name
+    origin_id   = local.s3_origin_id
+    custom_origin_config {
+      http_port              = "80"
+      https_port             = "443"
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1", "TLSv1.1", "TLSv1.2"]
+    }
+  }
+  enabled             = true
+  is_ipv6_enabled     = true
+  comment             = "Some comment"
+  default_root_object = "index.html"
 
-# resource "aws_cloudfront_distribution" "s3_distribution" {
-#   depends_on = [aws_apigatewayv2_domain_name.custom_domain]
-#   origin_group {
-#     origin_id = "s3_origin"
-#     failover_criteria {
-#       status_codes = [403, 404, 500, 502]
-#     }
-#     member {
-#       origin_id = "S3Origin"
-#     }
-#     member {
-#       origin_id = "ApiGatewayOrigin"
-#     }
-#   }
-#   origin {
-#     # domain_name = aws_s3_bucket.portfolio_bucket.website_endpoint
-#     domain_name = aws_s3_bucket_website_configuration.portfolio_bucket_website.website_endpoint
-#     origin_id   = "S3Origin"
-#     custom_origin_config {
-#       http_port              = "80"
-#       https_port             = "443"
-#       origin_protocol_policy = "http-only"
-#       origin_ssl_protocols   = ["TLSv1", "TLSv1.1", "TLSv1.2"]
-#     }
-#   }
-#   origin {
-#     domain_name = aws_apigatewayv2_domain_name.custom_domain.domain_name
-#     origin_id   = "ApiGatewayOrigin"
-#     custom_origin_config {
-#       http_port              = 80
-#       https_port             = 443
-#       origin_protocol_policy = "https-only"
-#       origin_ssl_protocols   = ["TLSv1.2"]
-#     }
-#   }
+  # logging_config {
+  #   include_cookies = false
+  #   bucket          = "mylogs.s3.amazonaws.com"
+  #   prefix          = "myprefix"
+  # }
+  default_cache_behavior {
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = local.s3_origin_id
 
-#   enabled         = true
-#   is_ipv6_enabled = true
-#   aliases         = ["ahadkhans.com", "www.ahadkhans.com", "api.ahadkhans.com"]
-#   default_cache_behavior {
-#     allowed_methods  = ["GET", "HEAD", "OPTIONS"]
-#     cached_methods   = ["GET", "HEAD"]
-#     target_origin_id = "s3_origin"
+    forwarded_values {
+      query_string = false
 
-#     forwarded_values {
-#       query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
 
-#       cookies {
-#         forward = "none"
-#       }
-#     }
+    viewer_protocol_policy = "allow-all"
+    min_ttl                = 0
+    default_ttl            = 3600
+    max_ttl                = 86400
+  }
 
-#     viewer_protocol_policy = "allow-all"
-#     min_ttl                = 0
-#     default_ttl            = 3600
-#     max_ttl                = 86400
-#   }
+  price_class = "PriceClass_200"
 
-#   price_class = "PriceClass_200"
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
 
-#   restrictions {
-#     geo_restriction {
-#       restriction_type = "none"
-#     }
-#   }
+  tags = {
+    Environment = "Production via Terraform"
+  }
 
-#   tags = {
-#     Environment = "Production via Terraform"
-#   }
-
-#   viewer_certificate {
-#     acm_certificate_arn      = aws_acm_certificate.cert.arn
-#     ssl_support_method       = "sni-only"
-#     minimum_protocol_version = "TLSv1.2_2021"
-#   }
-# }
+  viewer_certificate {
+    acm_certificate_arn      = aws_acm_certificate.cert.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
+}
