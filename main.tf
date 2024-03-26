@@ -142,6 +142,7 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
   #   bucket          = "mylogs.s3.amazonaws.com"
   #   prefix          = "myprefix"
   # }
+  aliases = ["ahadkhans.com", "www.ahadkhans.com", "api.ahadkhans.com"]
   default_cache_behavior {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
