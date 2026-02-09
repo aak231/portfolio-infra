@@ -12,12 +12,13 @@ provider "aws" {
   region = "us-east-1"
 }
 resource "aws_s3_bucket" "portfolio_bucket" {
-  bucket = "ahadkhans.com" # Update with a globally unique bucket name
+  bucket = local.domain # Update with a globally unique bucket name
   tags = {
     Name        = "My portfolio via terraform"
     Environment = "Production"
   }
 }
+
 resource "aws_s3_bucket_ownership_controls" "portfolio_bucket_ownership" {
   bucket = aws_s3_bucket.portfolio_bucket.id
   rule {
@@ -73,13 +74,12 @@ resource "aws_s3_bucket_policy" "allow_access_from_current_account" {
   })
 }
 resource "aws_acm_certificate" "cert" {
-  domain_name       = "ahadkhans.com"
+  domain_name       = local.domain
   validation_method = "DNS"
   subject_alternative_names = [
-    "ahadkhans.com",
-    "www.ahadkhans.com",
-    "api.ahadkhans.com",
-    "locationapi.ahadkhans.com"
+    local.domain,
+    local.www_domain,
+    local.api_domain
     # Add additional domain names as needed
   ]
   tags = {
@@ -93,8 +93,8 @@ resource "aws_acm_certificate" "cert" {
     certificate_transparency_logging_preference = "ENABLED"
   }
 }
-data "aws_route53_zone" "portfolio" {
-  name = "ahadkhans.com"
+resource "aws_route53_zone" "portfolio" {
+  name = local.domain
 }
 resource "aws_route53_record" "cname_records" {
   for_each = {
@@ -110,7 +110,7 @@ resource "aws_route53_record" "cname_records" {
   records         = [each.value.record]
   ttl             = 60
   type            = each.value.type
-  zone_id         = data.aws_route53_zone.portfolio.zone_id
+  zone_id         = aws_route53_zone.portfolio.zone_id
 }
 
 resource "aws_acm_certificate_validation" "cert_validation" {
@@ -142,7 +142,11 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
   #   bucket          = "mylogs.s3.amazonaws.com"
   #   prefix          = "myprefix"
   # }
-  aliases = ["ahadkhans.com", "www.ahadkhans.com", "api.ahadkhans.com"]
+  aliases = [
+    local.domain,
+    local.www_domain,
+    local.api_domain
+    ]
   default_cache_behavior {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
@@ -181,8 +185,8 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
   }
 }
 resource "aws_route53_record" "cloudfront_distribution" {
-  zone_id = data.aws_route53_zone.portfolio.zone_id
-  name    = "ahadkhans.com"
+  zone_id = aws_route53_zone.portfolio.zone_id
+  name    = local.domain
   type    = "A"
 
   alias {
